@@ -12,6 +12,12 @@ from courseware.model_data import get_score
 from lms.djangoapps.course_blocks.api import get_course_blocks
 from opaque_keys.edx.keys import UsageKey
 from opaque_keys.edx.locator import CourseLocator
+from track.request_id_utils import (
+    set_user_action_type,
+    create_new_user_action_id,
+    get_user_action_type,
+    get_user_action_id
+)
 from xmodule.modulestore.django import modulestore
 
 from .config.models import PersistentGradesEnabledFlag
@@ -48,6 +54,14 @@ def recalculate_subsection_grade(
         return
 
     score_deleted = kwargs['score_deleted']
+
+    # the request cache is not maintained on celery workers,
+    # where this code runs. So we take the values from the
+    # main request cache and store them in the local request
+    # cache. This correlates model-level grading events with
+    # higher-level ones.
+    create_new_user_action_id(kwargs.get('user_action_id', None))
+    set_user_action_type(kwargs.get('user_action_type', None))
     scored_block_usage_key = UsageKey.from_string(usage_id).replace(course_key=course_key)
 
     # Verify the database has been updated with the scores when the task was
@@ -121,7 +135,11 @@ def _update_subsection_grades(
     )
 
     course = modulestore().get_course(course_key, depth=0)
-    subsection_grade_factory = SubsectionGradeFactory(student, course, course_structure)
+    subsection_grade_factory = SubsectionGradeFactory(
+        student,
+        course,
+        course_structure,
+    )
 
     try:
         for subsection_usage_key in subsections_to_update:
@@ -140,12 +158,26 @@ def _update_subsection_grades(
 
     except DatabaseError as exc:
         raise _retry_recalculate_subsection_grade(
-            user_id, course_id, usage_id, only_if_higher, weighted_earned, weighted_possible, score_deleted, exc,
+            user_id,
+            course_id,
+            usage_id,
+            only_if_higher,
+            weighted_earned,
+            weighted_possible,
+            score_deleted,
+            exc,
         )
 
 
 def _retry_recalculate_subsection_grade(
-        user_id, course_id, usage_id, only_if_higher, weighted_earned, weighted_possible, score_deleted, exc=None,
+        user_id,
+        course_id,
+        usage_id,
+        only_if_higher,
+        weighted_earned,
+        weighted_possible,
+        score_deleted,
+        exc=None,
 ):
     """
     Calls retry for the recalculate_subsection_grade task with the
@@ -160,6 +192,8 @@ def _retry_recalculate_subsection_grade(
             weighted_earned=weighted_earned,
             weighted_possible=weighted_possible,
             score_deleted=score_deleted,
+            user_action_id=unicode(get_user_action_id()),
+            user_action_type=unicode(get_user_action_type()),
         ),
         exc=exc,
     )

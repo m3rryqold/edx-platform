@@ -336,7 +336,7 @@ class CourseGradeFactory(object):
             raise PermissionDenied("User does not have access to this course")
         return (
             self._get_saved_grade(student, course, course_structure) or
-            self._compute_and_update_grade(student, course, course_structure, read_only)
+            self._compute_and_update_grade(student, course, course_structure, read_only=read_only)
         )
 
     GradeResult = namedtuple('GradeResult', ['student', 'course_grade', 'err_msg'])

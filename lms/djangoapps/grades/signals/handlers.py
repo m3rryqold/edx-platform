@@ -2,14 +2,21 @@
 Grades related signals.
 """
 
-from django.dispatch import receiver
 from logging import getLogger
 
-from courseware.model_data import get_score, set_score
+from django.dispatch import receiver
 from openedx.core.lib.grade_utils import is_score_higher
-from student.models import user_by_anonymous_id
 from submissions.models import score_set, score_reset
 
+from courseware.model_data import get_score, set_score
+from eventtracking import tracker
+from student.models import user_by_anonymous_id
+from track.request_id_utils import (
+    get_user_action_type,
+    get_user_action_id,
+    set_user_action_type,
+    create_new_user_action_id
+)
 from .signals import (
     PROBLEM_RAW_SCORE_CHANGED,
     PROBLEM_WEIGHTED_SCORE_CHANGED,
@@ -19,7 +26,6 @@ from .signals import (
 from ..new.course_grade import CourseGradeFactory
 from ..scores import weighted_score
 from ..tasks import recalculate_subsection_grade
-
 
 log = getLogger(__name__)
 
@@ -120,7 +126,7 @@ def score_published_handler(sender, block, user, raw_earned, raw_possible, only_
             user_id=user.id,
             course_id=unicode(block.location.course_key),
             usage_id=unicode(block.location),
-            only_if_higher=only_if_higher,
+            only_if_higher=only_if_higher
         )
     return update_score
 
@@ -158,6 +164,19 @@ def enqueue_subsection_update(sender, **kwargs):  # pylint: disable=unused-argum
     Handles the PROBLEM_WEIGHTED_SCORE_CHANGED signal by
     enqueueing a subsection update operation to occur asynchronously.
     """
+    _validate_tracking_info('edx.grades.problem.submitted')
+    tracker.emit(
+        u'edx.grades.problem.submitted',
+        {
+            'user_id': unicode(kwargs['user_id']),
+            'course_id': unicode(kwargs['course_id']),
+            'problem_id': unicode(kwargs['usage_id']),
+            'user_action_id': unicode(get_user_action_id()),
+            'user_action_type': unicode(get_user_action_type()),
+            'weighted_earned': kwargs.get('weighted_earned'),
+            'weighted_possible': kwargs.get('weighted_possible'),
+        }
+    )
     result = recalculate_subsection_grade.apply_async(
         kwargs=dict(
             user_id=kwargs['user_id'],
@@ -167,6 +186,8 @@ def enqueue_subsection_update(sender, **kwargs):  # pylint: disable=unused-argum
             weighted_earned=kwargs.get('weighted_earned'),
             weighted_possible=kwargs.get('weighted_possible'),
             score_deleted=kwargs.get('score_deleted', False),
+            user_action_id=unicode(get_user_action_id()),
+            user_action_type=unicode(get_user_action_type()),
         )
     )
     log.info(
@@ -183,3 +204,16 @@ def recalculate_course_grade(sender, course, course_structure, user, **kwargs): 
     Updates a saved course grade.
     """
     CourseGradeFactory().update(user, course, course_structure)
+
+
+def _validate_tracking_info(default_root_type):
+    """
+    Gets the current user action information
+    or initializes it using the specified type.
+    """
+    root_id = get_user_action_id()
+    root_type = get_user_action_type()
+    if not root_id:
+        create_new_user_action_id()
+    if not root_type:
+        set_user_action_type(default_root_type)

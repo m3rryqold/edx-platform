@@ -9,6 +9,7 @@ from django.conf import settings
 from django.db.utils import IntegrityError
 from mock import patch
 from unittest import skip
+from uuid import uuid4
 
 from student.models import anonymous_id_for_user
 from student.tests.factories import UserFactory
@@ -67,6 +68,8 @@ class RecalculateSubsectionGradeTest(ModuleStoreTestCase):
             ('weighted_earned', 1.0),
             ('weighted_possible', 2.0),
             ('score_deleted', False),
+            ('user_action_id', unicode(uuid4())),
+            ('user_action_type', 'type'),
         ])
 
         # this call caches the anonymous id on the user object, saving 4 queries in all happy path tests
@@ -82,18 +85,27 @@ class RecalculateSubsectionGradeTest(ModuleStoreTestCase):
         with patch("lms.djangoapps.grades.tasks.get_score", return_value=score):
             yield
 
-    def test_problem_weighted_score_changed_queues_task(self):
+    @patch('track.request_id_utils.uuid4')
+    def test_problem_weighted_score_changed_queues_task(self, uuid_mock):
         """
         Ensures that the PROBLEM_WEIGHTED_SCORE_CHANGED signal enqueues the correct task.
         """
         self.set_up_course()
         send_args = self.problem_weighted_score_changed_kwargs
+
+        # When a problem weighted score changes, the user action id/type are overridden.
+        # Here we override the uuid function to always return the same value generated
+        # in set_up_course(), and update the expected user action type to match
+        # a problem submission.
+        uuid_mock.return_value = self.recalculate_subsection_grade_kwargs['user_action_id']
+        local_task_args = self.recalculate_subsection_grade_kwargs.copy()
+        local_task_args['user_action_type'] = u'edx.grades.problem.submitted'
         with self.mock_get_score() and patch(
             'lms.djangoapps.grades.tasks.recalculate_subsection_grade.apply_async',
             return_value=None
         ) as mock_task_apply:
             PROBLEM_WEIGHTED_SCORE_CHANGED.send(sender=None, **send_args)
-            mock_task_apply.assert_called_once_with(kwargs=self.recalculate_subsection_grade_kwargs)
+            mock_task_apply.assert_called_once_with(kwargs=local_task_args)
 
     @patch('lms.djangoapps.grades.signals.signals.SUBSECTION_SCORE_CHANGED.send')
     def test_subsection_update_triggers_signal(self, mock_subsection_signal):
