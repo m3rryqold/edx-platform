@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 # pylint: disable=not-callable
 @task(bind=True, default_retry_delay=3600, max_retries=24)
-def update_user(self, sailthru_vars, email, new_user=False, activation=False):
+def update_user(self, sailthru_vars, email, site_domain=None, new_user=False, activation=False):
     """
     Adds/updates Sailthru profile information for a user.
      Args:
@@ -36,8 +36,9 @@ def update_user(self, sailthru_vars, email, new_user=False, activation=False):
     sailthru_client = SailthruClient(email_config.sailthru_key, email_config.sailthru_secret)
     try:
         sailthru_response = sailthru_client.api_post("user",
-                                                     _create_sailthru_user_parm(sailthru_vars, email,
-                                                                                new_user, email_config))
+                                                     _create_sailthru_user_parm(sailthru_vars, sailthru_client,
+                                                                                email, new_user, email_config,
+                                                                                site_domain=site_domain))
 
     except SailthruClientError as exc:
         log.error("Exception attempting to add/update user %s in Sailthru - %s", email, unicode(exc))
@@ -111,7 +112,7 @@ def update_user_email(self, new_email, old_email):
                              max_retries=email_config.sailthru_max_retries)
 
 
-def _create_sailthru_user_parm(sailthru_vars, email, new_user, email_config):
+def _create_sailthru_user_parm(sailthru_vars, sailthru_client, email, new_user, email_config, site_domain=None):
     """
     Create sailthru user create/update parms
     """
@@ -119,8 +120,9 @@ def _create_sailthru_user_parm(sailthru_vars, email, new_user, email_config):
     sailthru_user['vars'] = dict(sailthru_vars, last_changed_time=int(time.time()))
 
     # if new user add to list
-    if new_user and email_config.sailthru_new_user_list:
-        sailthru_user['lists'] = {email_config.sailthru_new_user_list: 1}
+    if new_user:
+        list_name = _get_or_create_user_lists(sailthru_client, site_domain)
+        sailthru_user['lists'] = {list_name: 1} if list_name else {email_config.sailthru_new_user_list: 1}
 
     return sailthru_user
 
@@ -292,6 +294,72 @@ def _get_course_content(course_url, sailthru_client, email_config):
             response = {}
 
     return response
+
+
+def _get_or_create_user_lists(sailthru_client, site_domain=None):
+    """
+    Get the user list name from cache if exists else create one and return the name
+    :param sailthru_client:
+    :param user_lists:
+    :return: list name if exists or created else return None
+    """
+    email_config = EmailMarketingConfiguration.current()
+    if not email_config.enabled:
+        return
+
+    if site_domain and "edx.org" not in site_domain:
+        list_name = site_domain.replace(".", "_") + "_user_list"
+    else:
+        list_name = "All edX Users"
+
+    cached = cache.get(email_config.CACHE_KEY)
+    if cached:
+        for user_list in cached['lists']:
+            if user_list.get('name') == list_name:
+                return list_name
+
+    sailthru_response = _get_or_create_list(sailthru_client, list_name)
+    if sailthru_response:
+        cache.set(email_config.CACHE_KEY, sailthru_response)
+        return list_name
+
+
+def _get_or_create_list(sailthru_client, list_name):
+    """
+    Get list from sailthru and return if list_name exists else create a new one
+    and return list data for all lists.
+    """
+    sailthru_get_response = sailthru_client.api_get("list", {})
+    if not sailthru_get_response.is_ok():
+        error = sailthru_get_response.get_error()
+        log.info("Error attempting to read list record from Sailthru: %s", error.get_message())
+        return
+
+    for user_list in sailthru_get_response.json['lists']:
+        if user_list.get('name') == list_name:
+            return sailthru_get_response.json
+
+    # create a list in sailthru
+    list_params = {'list': list_name, 'primary': 0, 'public_name': list_name}
+    try:
+        sailthru_response = sailthru_client.api_post("list", list_params)
+    except SailthruClientError as exc:
+        log.error("Exception attempting to list record for key %s in Sailthru - %s", list_name, unicode(exc))
+        return
+
+    if not sailthru_response.is_ok():
+        error = sailthru_response.get_error()
+        log.error("Error attempting to create list in Sailthru: %s", error.get_message())
+        return
+
+    # get all the lists including the new created one
+    sailthru_get_response = sailthru_client.api_get("list", {})
+    if not sailthru_get_response.is_ok():
+        error = sailthru_get_response.get_error()
+        log.info("Error attempting to read list record from Sailthru: %s", error.get_message())
+        return
+
+    return sailthru_get_response.json
 
 
 def _update_unenrolled_list(sailthru_client, email, course_url, unenroll):

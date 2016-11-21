@@ -1,9 +1,11 @@
 """Tests of email marketing signal handlers."""
-import logging
 import ddt
+import json
+import logging
 
 from django.test import TestCase
 from django.contrib.auth.models import AnonymousUser
+from django.contrib.sites.models import Site
 from mock import patch, ANY
 from util.json_request import JsonResponse
 
@@ -12,7 +14,7 @@ from email_marketing.signals import handle_enroll_status_change, \
     email_marketing_user_field_changed, \
     add_email_marketing_cookies
 from email_marketing.tasks import update_user, update_user_email, update_course_enrollment, \
-    _get_course_content, _update_unenrolled_list
+    _get_course_content, _update_unenrolled_list, _get_or_create_list
 from email_marketing.models import EmailMarketingConfiguration
 from django.test.client import RequestFactory
 from student.tests.factories import UserFactory, UserProfileFactory
@@ -67,6 +69,10 @@ class EmailMarketingTests(TestCase):
         self.course_id_string = 'edX/toy/2012_Fall'
         self.course_id = CourseKey.from_string(self.course_id_string)
         self.course_url = 'http://testserver/courses/edX/toy/2012_Fall/info'
+
+        self.site = Site.objects.get_current()
+        self.site_domain = self.site.domain
+        self.request.site = self.site
         super(EmailMarketingTests, self).setUp()
 
     @patch('email_marketing.signals.crum.get_current_request')
@@ -119,7 +125,9 @@ class EmailMarketingTests(TestCase):
         test async method in tasks that actually updates Sailthru
         """
         mock_sailthru.return_value = SailthruResponse(JsonResponse({'ok': True}))
-        update_user.delay({'gender': 'm', 'username': 'test', 'activated': 1}, TEST_EMAIL, new_user=True)
+        update_user.delay(
+            {'gender': 'm', 'username': 'test', 'activated': 1}, TEST_EMAIL, self.site_domain, new_user=True
+        )
         self.assertFalse(mock_log_error.called)
         self.assertEquals(mock_sailthru.call_args[0][0], "user")
         userparms = mock_sailthru.call_args[0][1]
@@ -128,6 +136,19 @@ class EmailMarketingTests(TestCase):
         self.assertEquals(userparms['vars']['gender'], "m")
         self.assertEquals(userparms['vars']['username'], "test")
         self.assertEquals(userparms['vars']['activated'], 1)
+        self.assertEquals(userparms['lists']['new list'], 1)
+
+    @patch('email_marketing.tasks.SailthruClient.api_post')
+    def test_add_user_list_non_existing_domain(self, mock_sailthru):
+        """
+        test non existing domain name updates Sailthru user lists with default list
+        """
+        mock_sailthru.return_value = SailthruResponse(JsonResponse({'ok': True}))
+        update_user.delay(
+            {'gender': 'm', 'username': 'test', 'activated': 1}, TEST_EMAIL, 'non-existing.example.com', new_user=True
+        )
+        self.assertEquals(mock_sailthru.call_args[0][0], "user")
+        userparms = mock_sailthru.call_args[0][1]
         self.assertEquals(userparms['lists']['new list'], 1)
 
     @patch('email_marketing.tasks.SailthruClient.api_post')
@@ -156,7 +177,7 @@ class EmailMarketingTests(TestCase):
         # force Sailthru API exception
         mock_log_error.reset_mock()
         mock_sailthru.side_effect = SailthruClientError
-        update_user.delay({}, self.user.email)
+        update_user.delay({}, self.user.email, self.site_domain)
         self.assertTrue(mock_log_error.called)
 
         # force Sailthru API exception on 2nd call
@@ -459,9 +480,41 @@ class EmailMarketingTests(TestCase):
         self.assertFalse(_update_unenrolled_list(mock_sailthru_client, TEST_EMAIL,
                                                  self.course_url, False))
 
+    @patch('email_marketing.tasks.SailthruClient')
+    def test_get_or_create_sailthru_list(self, mock_sailthru_client):
+        """
+        Test the task the create sailthru lists.
+        """
+        mock_sailthru_client.api_get.return_value = SailthruResponse(JsonResponse({'lists': []}))
+        _get_or_create_list(mock_sailthru_client, 'test1_user_list')
+        mock_sailthru_client.api_get.assert_called_with("list", {})
+        mock_sailthru_client.api_post.assert_called_with(
+            "list", {'list': 'test1_user_list', 'primary': 0, 'public_name': 'test1_user_list'}
+        )
+
+        # test existing user list
+        mock_sailthru_client.api_get.return_value = \
+            SailthruResponse(JsonResponse({'lists': [{'name': 'test1_user_list'}]}))
+        _get_or_create_list(mock_sailthru_client, 'test2_user_list')
+        mock_sailthru_client.api_get.assert_called_with("list", {})
+        mock_sailthru_client.api_post.assert_called_with(
+            "list", {'list': 'test2_user_list', 'primary': 0, 'public_name': 'test2_user_list'}
+        )
+
+        # test get error from Sailthru
+        mock_sailthru_client.api_get.return_value = \
+            SailthruResponse(JsonResponse({'error': 43, 'errormsg': 'Got an error'}))
+        self.assertEqual(_get_or_create_list(mock_sailthru_client, 'test1_user_list'), None)
+
+        # test post error from Sailthru
+        mock_sailthru_client.api_post.return_value = \
+            SailthruResponse(JsonResponse({'error': 43, 'errormsg': 'Got an error'}))
+        mock_sailthru_client.api_get.return_value = SailthruResponse(JsonResponse({'lists': []}))
+        self.assertEqual(_get_or_create_list(mock_sailthru_client, 'test2_user_list'), None)
+
     @patch('email_marketing.tasks.log.error')
     @patch('email_marketing.tasks.SailthruClient.api_post')
-    def test_error_logging1(self, mock_sailthru, mock_log_error):
+    def test_error_logging(self, mock_sailthru, mock_log_error):
         """
         Ensure that error returned from Sailthru api is logged
         """
@@ -473,23 +526,27 @@ class EmailMarketingTests(TestCase):
         update_user_email.delay(self.user.username, "newemail2@test.com")
         self.assertTrue(mock_log_error.called)
 
+    @patch('email_marketing.signals.crum.get_current_request')
     @patch('lms.djangoapps.email_marketing.tasks.update_user.delay')
-    def test_register_user(self, mock_update_user):
+    def test_register_user(self, mock_update_user, mock_get_current_request):
         """
         make sure register user call invokes update_user
         """
+        mock_get_current_request.return_value = self.request
         email_marketing_register_user(None, user=self.user, profile=self.profile)
         self.assertTrue(mock_update_user.called)
 
+    @patch('email_marketing.signals.crum.get_current_request')
     @patch('lms.djangoapps.email_marketing.tasks.update_user.delay')
     @ddt.data(('auth_userprofile', 'gender', 'f', True),
               ('auth_user', 'is_active', 1, True),
               ('auth_userprofile', 'shoe_size', 1, False))
     @ddt.unpack
-    def test_modify_field(self, table, setting, value, result, mock_update_user):
+    def test_modify_field(self, table, setting, value, result, mock_update_user, mock_get_current_request):
         """
         Test that correct fields call update_user
         """
+        mock_get_current_request.return_value = self.request
         email_marketing_user_field_changed(None, self.user, table=table, setting=setting, new_value=value)
         self.assertEqual(mock_update_user.called, result)
 

@@ -13,6 +13,8 @@ class EmailMarketingConfiguration(ConfigurationModel):
     class Meta(object):
         app_label = "email_marketing"
 
+    CACHE_KEY = "email.marketing.cache"
+
     sailthru_key = models.fields.CharField(
         max_length=32,
         help_text=_(
