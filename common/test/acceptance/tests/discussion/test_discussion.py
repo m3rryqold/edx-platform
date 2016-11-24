@@ -1013,8 +1013,8 @@ class InlineDiscussionTest(UniqueCourseTest, DiscussionResponsePaginationTestMix
     def setup_thread_page(self, thread_id):
         self.discussion_page.expand_discussion()
         self.assertEqual(self.discussion_page.get_num_displayed_threads(), 1)
-        self.thread_page = InlineDiscussionThreadPage(self.browser, thread_id)  # pylint: disable=attribute-defined-outside-init
-        self.thread_page.expand()
+        self.discussion_page.show_thread(thread_id)
+        self.thread_page = self.discussion_page.thread_page  # pylint: disable=attribute-defined-outside-init
 
     def setup_multiple_inline_threads(self, thread_count):
         """
@@ -1034,19 +1034,6 @@ class InlineDiscussionTest(UniqueCourseTest, DiscussionResponsePaginationTestMix
             threads[0]
         )
         thread_fixture.push()
-
-    def test_page_while_expanding_inline_discussion(self):
-        """
-        Tests for the Inline Discussion page with multiple treads. Page should not focus 'thread-wrapper'
-        after loading responses.
-        """
-        self.setup_multiple_inline_threads(thread_count=3)
-        self.discussion_page.expand_discussion()
-        thread_page = InlineDiscussionThreadPage(self.browser, self.thread_ids[0])
-        thread_page.expand()
-
-        # Check if 'thread-wrapper' is focused after expanding thread
-        self.assertFalse(thread_page.check_if_selector_is_focused(selector='.thread-wrapper'))
 
     @attr('a11y')
     def test_inline_a11y(self):

@@ -501,10 +501,6 @@ class InlineDiscussionPage(PageObject):
     def get_num_displayed_threads(self):
         return len(self._find_within(".forum-nav-thread"))
 
-    def has_thread(self, thread_id):
-        """Returns true if this page is showing the thread with the specified id."""
-        return self._find_within('.discussion-thread#thread_{}'.format(thread_id)).present
-
     def element_exists(self, selector):
         return self.q(css=self._discussion_selector + " " + selector).present
 
@@ -537,21 +533,22 @@ class InlineDiscussionPage(PageObject):
         query = self._find_within(selector)
         return query.present and query.visible
 
+    def show_thread(self, thread_id):
+        """
+        Clicks the link for the specified thread to show the detailed view.
+        """
+        thread_selector = ".forum-nav-thread[data-id='{thread_id}'] .forum-nav-thread-link".format(thread_id=thread_id)
+        self._find_within(thread_selector).first.click()
+        self.thread_page = InlineDiscussionThreadPage(self.browser, thread_id)  # pylint: disable=attribute-defined-outside-init
+        self.thread_page.wait_for_page()
+
 
 class InlineDiscussionThreadPage(DiscussionThreadPage):
     def __init__(self, browser, thread_id):
         super(InlineDiscussionThreadPage, self).__init__(
             browser,
-            "body.courseware .discussion-module #thread_{thread_id}".format(thread_id=thread_id)
+            ".discussion-module .discussion-article[data-id='{thread_id}']".format(thread_id=thread_id)
         )
-
-    def expand(self):
-        """Clicks the link to expand the thread"""
-        self._find_within(".forum-thread-expand").first.click()
-        EmptyPromise(
-            lambda: bool(self.get_response_total_text()),
-            "Thread expanded"
-        ).fulfill()
 
     def is_thread_anonymous(self):
         return not self.q(css=".posted-details > .username").present
@@ -725,8 +722,7 @@ class DiscussionTabHomePage(CoursePage, DiscussionPageMixin):
         """
         Returns the new post button.
         """
-        elements = self.q(css=".new-post-btn")
-        return elements.first if elements.visible and len(elements) == 1 else None
+        return next(button for button in self.q(css=".new-post-btn") if button.is_displayed())
 
     @property
     def new_post_form(self):
