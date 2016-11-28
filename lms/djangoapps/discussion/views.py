@@ -20,6 +20,8 @@ from openedx.core.djangoapps.course_groups.cohorts import (
     get_cohort_id,
     get_course_cohorts,
 )
+from openedx.core.djangoapps.util.xblocks import get_ui_block_runtime
+
 from courseware.access import has_access
 from xmodule.modulestore.django import modulestore
 
@@ -248,7 +250,7 @@ def forum_form_discussion(request, course_key):
     else:
         with newrelic.agent.FunctionTrace(nr_transaction, "get_cohort_info"):
             user_cohort_id = get_cohort_id(request.user, course_key)
-        discussion_board_block = course.runtime.construct_ui_block('discussion_board')
+        discussion_board_block = get_ui_block_runtime().construct_ui_block('discussion_board')
         discussion_board_fragment = discussion_board_block.render('student_view', context=request.GET)
 
         context = {

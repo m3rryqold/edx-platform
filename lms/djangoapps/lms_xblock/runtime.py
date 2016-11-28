@@ -6,18 +6,19 @@ from django.core.urlresolvers import reverse
 
 from badges.service import BadgingService
 from badges.utils import badges_enabled
-from openedx.core.djangoapps.user_api.course_tag import api as user_course_tag_api
 from openedx.core.lib.xblock_utils import xblock_local_resource_url
 from openedx.core.lib.url_utils import quote_slashes
 from request_cache.middleware import RequestCache
 import xblock.reference.plugins
+from xblock.runtime import UIBlockRuntime
 from xmodule.library_tools import LibraryToolsService
 from xmodule.modulestore.django import modulestore, ModuleI18nService
-from xmodule.partitions.partitions_service import PartitionService
 from xmodule.services import SettingsService
 from xmodule.x_module import ModuleSystem
 
 from lms.djangoapps.lms_xblock.models import XBlockAsidesConfig
+
+from .services import LmsPartitionService, UserTagsService
 
 
 def handler_url(block, handler_name, suffix='', query='', thirdparty=False):
@@ -80,68 +81,36 @@ def local_resource_url(block, uri):
     return xblock_local_resource_url(block, uri)
 
 
-class LmsPartitionService(PartitionService):
+def add_runtime_services(runtime, services, **kwargs):
     """
-    Another runtime mixin that provides access to the student partitions defined on the
-    course.
-
-    (If and when XBlock directly provides access from one block (e.g. a split_test_module)
-    to another (e.g. a course_module), this won't be necessary, but for now it seems like
-    the least messy way to hook things through)
-
+    Adds LMS-specific runtime services to the specified dict.
     """
-    @property
-    def course_partitions(self):
-        course = modulestore().get_course(self._course_id)
-        return course.user_partitions
+    request_cache_dict = RequestCache.get_request_cache().data
+    services['fs'] = xblock.reference.plugins.FSService()
+    services['i18n'] = ModuleI18nService
+    services['library_tools'] = LibraryToolsService(modulestore())
+    services['partitions'] = LmsPartitionService(
+        user=kwargs.get('user'),
+        course_id=kwargs.get('course_id'),
+        track_function=kwargs.get('track_function', None),
+        cache=request_cache_dict
+    )
+    store = modulestore()
+    services['settings'] = SettingsService()
+    services['user_tags'] = UserTagsService(runtime)
+    if badges_enabled():
+        services['badging'] = BadgingService(course_id=kwargs.get('course_id'), modulestore=store)
 
 
-class UserTagsService(object):
+class LmsUIBlockRuntime(UIBlockRuntime):
     """
-    A runtime class that provides an interface to the user service.  It handles filling in
-    the current course id and current user.
+    An LMS-specific implementation of a UIBlockRuntime
     """
 
-    COURSE_SCOPE = user_course_tag_api.COURSE_SCOPE
-
-    def __init__(self, runtime):
-        self.runtime = runtime
-
-    def _get_current_user(self):
-        """Returns the real, not anonymized, current user."""
-        real_user = self.runtime.get_real_user(self.runtime.anonymous_student_id)
-        return real_user
-
-    def get_tag(self, scope, key):
-        """
-        Get a user tag for the current course and the current user for a given key
-
-            scope: the current scope of the runtime
-            key: the key for the value we want
-        """
-        if scope != user_course_tag_api.COURSE_SCOPE:
-            raise ValueError("unexpected scope {0}".format(scope))
-
-        return user_course_tag_api.get_course_tag(
-            self._get_current_user(),
-            self.runtime.course_id, key
-        )
-
-    def set_tag(self, scope, key, value):
-        """
-        Set the user tag for the current course and the current user for a given key
-
-            scope: the current scope of the runtime
-            key: the key that to the value to be set
-            value: the value to set
-        """
-        if scope != user_course_tag_api.COURSE_SCOPE:
-            raise ValueError("unexpected scope {0}".format(scope))
-
-        return user_course_tag_api.set_course_tag(
-            self._get_current_user(),
-            self.runtime.course_id, key, value
-        )
+    def __init__(self, **kwargs):
+        services = kwargs.setdefault('services', {})
+        add_runtime_services(self, services)
+        super(LmsUIBlockRuntime, self).__init__(**kwargs)
 
 
 class LmsModuleSystem(ModuleSystem):  # pylint: disable=abstract-method
@@ -149,22 +118,8 @@ class LmsModuleSystem(ModuleSystem):  # pylint: disable=abstract-method
     ModuleSystem specialized to the LMS
     """
     def __init__(self, **kwargs):
-        request_cache_dict = RequestCache.get_request_cache().data
         services = kwargs.setdefault('services', {})
-        services['fs'] = xblock.reference.plugins.FSService()
-        services['i18n'] = ModuleI18nService
-        services['library_tools'] = LibraryToolsService(modulestore())
-        services['partitions'] = LmsPartitionService(
-            user=kwargs.get('user'),
-            course_id=kwargs.get('course_id'),
-            track_function=kwargs.get('track_function', None),
-            cache=request_cache_dict
-        )
-        store = modulestore()
-        services['settings'] = SettingsService()
-        services['user_tags'] = UserTagsService(self)
-        if badges_enabled():
-            services['badging'] = BadgingService(course_id=kwargs.get('course_id'), modulestore=store)
+        add_runtime_services(self, services)
         self.request_token = kwargs.pop('request_token', None)
         super(LmsModuleSystem, self).__init__(**kwargs)
 

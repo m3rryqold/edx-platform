@@ -3,6 +3,17 @@ XBlock runtime implementations for edX Studio
 """
 
 from django.core.urlresolvers import reverse
+from xblock.runtime import UIBlockRuntime
+
+
+class CmsUIBlockRuntime(UIBlockRuntime):
+    """
+    A CMS-specific implementation of a UIBlockRuntime.
+    """
+
+    def __init__(self, services=None, default_class=None, select=None):
+        # TODO: instantiate the default set of services
+        super(CmsUIBlockRuntime, self).__init__(services, default_class, select)
 
 
 def handler_url(block, handler_name, suffix='', query='', thirdparty=False):

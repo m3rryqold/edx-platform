@@ -713,6 +713,8 @@ XBLOCK_SELECT_FUNCTION = prefer_xmodules
 # Paths to wrapper methods which should be applied to every XBlock's FieldData.
 XBLOCK_FIELD_DATA_WRAPPERS = ()
 
+UI_BLOCK_RUNTIME = 'lms.djangoapps.lms_xblock.runtime.LmsUIBlockRuntime'
+
 ############# ModuleStore Configuration ##########
 
 MODULESTORE_BRANCH = 'published-only'

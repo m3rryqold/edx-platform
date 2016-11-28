@@ -51,6 +51,7 @@ from lms.djangoapps.verify_student.services import VerificationService, Reverifi
 from openedx.core.djangoapps.bookmarks.services import BookmarksService
 from openedx.core.djangoapps.credit.services import CreditService
 from openedx.core.djangoapps.util.user_utils import SystemUser
+from openedx.core.djangoapps.util.xblocks import get_ui_block_runtime
 from openedx.core.lib.xblock_utils import (
     replace_course_urls,
     replace_jump_to_id_urls,
@@ -633,6 +634,7 @@ def get_module_system_for_user(user, student_data,  # TODO  # pylint: disable=to
         track_function=track_function,
         render_template=render_to_string,
         static_url=settings.STATIC_URL,
+        ui_block_runtime=get_ui_block_runtime(),
         xqueue=xqueue,
         # TODO (cpennington): Figure out how to share info between systems
         filestore=descriptor.runtime.resources_fs,

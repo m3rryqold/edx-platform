@@ -87,6 +87,7 @@ from warnings import simplefilter
 
 from lms.djangoapps.lms_xblock.mixin import LmsBlockMixin
 from cms.lib.xblock.authoring_mixin import AuthoringMixin
+from cms.lib.xblock.runtime import CmsUIBlockRuntime
 import dealer.git
 from xmodule.modulestore.edit_info import EditInfoMixin
 from xmodule.mixin import LicenseMixin
@@ -415,6 +416,8 @@ XBLOCK_SELECT_FUNCTION = prefer_xmodules
 
 # Paths to wrapper methods which should be applied to every XBlock's FieldData.
 XBLOCK_FIELD_DATA_WRAPPERS = ()
+
+UI_BLOCK_RUNTIME = 'cms.lib.xblock.runtime.CmsUIBlockRuntime'
 
 ############################ Modulestore Configuration ################################
 MODULESTORE_BRANCH = 'draft-preferred'

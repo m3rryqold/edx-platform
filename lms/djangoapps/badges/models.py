@@ -14,10 +14,11 @@ from model_utils.models import TimeStampedModel
 from opaque_keys import InvalidKeyError
 from opaque_keys.edx.keys import CourseKey
 
-from badges.utils import deserialize_count_specs
 from config_models.models import ConfigurationModel
 from xmodule.modulestore.django import modulestore
 from openedx.core.djangoapps.xmodule_django.models import CourseKeyField
+
+from .utils import deserialize_count_specs
 
 
 def validate_badge_image(image):

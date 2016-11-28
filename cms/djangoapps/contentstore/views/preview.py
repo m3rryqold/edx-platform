@@ -31,6 +31,7 @@ from xblock_django.user_service import DjangoXBlockUserService
 
 from lms.djangoapps.lms_xblock.field_data import LmsFieldData
 from cms.lib.xblock.field_data import CmsFieldData
+from openedx.core.djangoapps.util.xblocks import get_ui_block_runtime
 
 from util.sandboxing import can_execute_unsafe_code, get_python_lib_zip
 
@@ -198,6 +199,7 @@ def _preview_module_system(request, descriptor, field_data):
 
     return PreviewModuleSystem(
         static_url=settings.STATIC_URL,
+        ui_block_runtime=get_ui_block_runtime(),
         # TODO (cpennington): Do we want to track how instructors are using the preview problems?
         track_function=lambda event_type, event: None,
         filestore=descriptor.runtime.resources_fs,
