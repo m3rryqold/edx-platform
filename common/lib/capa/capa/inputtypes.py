@@ -629,8 +629,11 @@ class JSInput(InputTypeBase):
                                              #   set state
             Attribute('width', "400"),       # iframe width
             Attribute('height', "300"),      # iframe height
-            Attribute('sop', None)           # SOP will be relaxed only if this
-                                             # attribute is set to false.
+            # Title for the iframe, should be supplied by the author of the problem. Not translated
+            # because default display name is also not translated, and we can't import Django here anyway.
+            Attribute('title', "Custom Javascript Display Iframe"),
+            # SOP will be relaxed only if this attribute is set to false.
+            Attribute('sop', None)
         ]
 
     def _extra_context(self):
