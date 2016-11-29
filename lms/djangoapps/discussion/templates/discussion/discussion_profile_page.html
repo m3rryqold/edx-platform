@@ -5,38 +5,50 @@
 <%page expression_filter="h"/>
 <%inherit file="../main.html" />
 <%namespace name='static' file='../static_content.html'/>
+<%def name="online_help_token()"><% return "discussions" %></%def>
 <%!
-from django.utils.translation import ugettext as _
+import json
+from django.utils.translation import ugettext as _, ungettext
 from django.template.defaultfilters import escapejs
-from openedx.core.djangolib.js_utils import (
-    dump_js_escaped_json, js_escaped_string
-)
+from django.core.urlresolvers import reverse
+
+from django_comment_client.permissions import has_permission
+from openedx.core.djangolib.js_utils import dump_js_escaped_json, js_escaped_string
 %>
 
-<%block name="bodyclass">discussion-user-profile</%block>
+<%block name="bodyclass">discussion discussion-user-profile</%block>
 <%block name="pagetitle">${_("Discussion - {course_number}").format(course_number=course.display_number_with_default)}</%block>
 
 <%block name="headextra">
+<%static:css group='style-inline-discussion'/>
 <%include file="_js_head_dependencies.html" />
 </%block>
 
-<%block name="js_extra">
-<%include file="_js_body_dependencies.html" />
+<%block name="base_js_dependencies">
+    ## Enable fast preview to fix discussion MathJax rendering bug when page first loads.
+    <%include file="_js_body_dependencies.html" args="disable_fast_preview=False"/>
+</%block>
 
+<%block name="js_extra">
 <%static:require_module module_name="discussion/js/discussion_profile_page_factory" class_name="DiscussionProfilePageFactory">
     <%
     profile_page_context = {
+        'courseSettings': course_settings,
         'courseId': unicode(course.id),
         'courseName': course.display_name_with_default,
+        'contentInfo': annotated_content_info,
         'userInfo': user_info,
+        'roles': roles,
         'threads': threads,
         'page': page,
+        'sortPreference': sort_preference,
         'numPages': num_pages,
     }
+
     %>
     DiscussionProfilePageFactory(_.extend(
         {
-            $el: $('.discussion-user-threads')
+            $el: $('.discussion-user-profile-board')
         },
         ${profile_page_context | n, dump_js_escaped_json}
     ));
@@ -45,34 +57,59 @@ from openedx.core.djangolib.js_utils import (
 
 <%include file="../courseware/course_navigation.html" args="active_page='discussion'" />
 
-<section class="container">
+<%block name="content">
+<section class="discussion inline-discussion discussion-user-profile-board container" 
+         data-course-id="${course.id}"
+         data-user-create-comment="${json.dumps(can_create_comment)}"
+         data-user-create-subcomment="${json.dumps(can_create_subcomment)}"
+         data-read-only="false"
+         data-sort-preference="${sort_preference}"
+         data-flag-moderator="${json.dumps(flag_moderator)}"
+         data-user-cohort-id="${user_cohort}">
     <header class="page-header">
         <div class="page-header-main">
             <div class="sr-is-focusable" tabindex="-1"></div>
-            <h2 class="hd hd-2 page-title">${_("Discussion")}</h2>
+            <h3 class="hd hd-3 page-title">${_("Profile")}</h2>
+            <div class="discussion-profile-info-wrapper">
+                <%def name="span(num)"><span class="discussion-count">${num}</span></%def>
+                <span class="user-name"><a href="${learner_profile_page_url}">${django_user.username | h}</a></span>
+                <span class="discussion-profile-info"><span class="user-roles">${", ".join(_(role_name) for role_name in django_user_roles)}</span></span>
+                <span class="discussion-profile-info threads-count">${ungettext('%s discussion started', '%s discussions started', profiled_user['threads_count']) % span(profiled_user['threads_count']) | h}</span>
+                <span class="discussion-profile-info  comments-count">${ungettext('%s comment', '%s comments', profiled_user['comments_count']) % span(profiled_user['comments_count']) | h}</span>
+            </div>
         </div>
     </header>
     <div class="page-content">
-        <div class="layout layout-1t2t">
-            <aside class="forum-nav layout-col layout-col-a" role="complementary" aria-label="${_("Discussion thread list")}">
-                <nav class="user-profile" aria-label="${_('User Profile')}">
-
-                    <article class="sidebar-module discussion-sidebar">
-                        <%include file="_user_profile.html" />
-                    </article>
-
-                </nav>
-            </aside>
-
-            <main id="main" aria-label="Content" tabindex="-1" class="discussion-column layout-col layout-col-b">
-                <div class="course-content discussion-user-threads" data-course-id="${course.id}"
-                     data-course-name="${course.display_name_with_default}"
-                     data-threads="${threads}" data-user-info="${user_info}"
-                     data-page="${page}" data-num-pages="${num_pages}">
+        <main id="main" aria-label="Content" tabindex="-1" class="discussion-column layout-col layout-col-b">
+            <div class="course-content discussion-module discussion-user-threads"
+                data-course-id="${course.id}"
+                data-course-name="${course.display_name_with_default}"
+                data-threads="${threads}"
+                data-user-info="${user_info}"
+                data-page="${page}"
+                data-num-pages="${num_pages}"
+                data-user-create-comment="${json.dumps(can_create_comment)}"
+                data-user-create-subcomment="${json.dumps(can_create_subcomment)}"
+                data-read-only="false"
+                data-sort-preference="${sort_preference}"
+                data-flag-moderator="${json.dumps(flag_moderator)}"
+                data-user-cohort-id="${user_cohort}">
+                <div class="inline-threads"></div>
+                <div class="inline-thread is-hidden">
+                    <div class="forum-nav-bar">
+                        <button class="btn-link all-posts-btn">
+                            <span class="icon fa fa-chevron-prev" aria-hidden="true"></span>
+                            <span>${_('All Posts')}</span>
+                        </button>
+                    </div>
+                    <div class="forum-content">
+                    </div>
                 </div>
-            </main>
-        </div>
+            </div>
+        </main>
     </div>
 </section>
+</%block>
 
 <%include file="_underscore_templates.html" />
+<%include file="_thread_list_template.html" />

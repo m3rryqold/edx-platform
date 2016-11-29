@@ -1,31 +1,47 @@
 // Layouts for discussion pages
 
-.user-profile {
-    background-color: $sidebar-color;
+.discussion-user-profile-board {
 
-    .user-profile {
-        padding: $baseline;
-        min-height: 500px;
+    .page-title {
+        @include margin-left($baseline);
+        display: inline-block;
     }
 
-    .sidebar-username {
-        font-weight: 700;
-        font-size: $forum-large-font-size;
+    .discussion-profile-info-wrapper {
+        display: inline-block;
     }
 
-    .sidebar-user-roles {
-        margin-top: $baseline/2;
-        font-style: italic;
-        font-size: $forum-base-font-size;
+    .discussion-profile-info  {
+        @include border-right(1px solid $forum-color-border);
+        @include padding(0, $baseline, 0, $baseline);
+        font-size: $forum-small-font-size;
     }
 
-    .sidebar-threads-count {
-        margin-top: $baseline/2;
+    .user-name {
+        @include margin(0, $baseline / 4, 0, $baseline);
+        font-size: $forum-x-large-font-size;
     }
 
-    .sidebar-threads-count span,
-    .sidebar-comments-count span {
-        font-weight: 700;
+    .user-roles {
+        padding: 0 $baseline / 4;
+        position: relative;
+        top: -$baseline / 10;
+        background-color: $forum-color-background-label;
+        color: $white;
+        font-size: $forum-small-font-size;
+        font-weight: bold;
+        border-radius: $forum-border-radius;
+    }
+
+    .discussion-count {
+        color: $forum-color-count;
+        font-size: $forum-x-large-font-size;
+        font-weight: bold;
+    }
+
+    .discussion-user-threads {
+      @include margin($baseline, auto, $baseline, auto);
+      width: 90%;
     }
 }
 
