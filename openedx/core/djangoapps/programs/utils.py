@@ -383,9 +383,6 @@ class ProgramDataExtender(object):
     def _attach_run_mode_course_url(self, run_mode):
         run_mode['course_url'] = reverse('course_root', args=[self.course_key])
 
-    def _attach_run_mode_end_date(self, run_mode):
-        run_mode['end_date'] = self.course_overview.end_datetime_text()
-
     def _attach_run_mode_enrollment_open_date(self, run_mode):
         run_mode['enrollment_open_date'] = strftime_localized(self.enrollment_start, 'SHORT_DATE')
 
@@ -402,9 +399,6 @@ class ProgramDataExtender(object):
 
     def _attach_run_mode_marketing_url(self, run_mode):
         run_mode['marketing_url'] = get_run_marketing_url(self.course_key, self.user)
-
-    def _attach_run_mode_start_date(self, run_mode):
-        run_mode['start_date'] = self.course_overview.start_datetime_text()
 
     def _attach_run_mode_upgrade_url(self, run_mode):
         required_mode_slug = run_mode['mode_slug']
