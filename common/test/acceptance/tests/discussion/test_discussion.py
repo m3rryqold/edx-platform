@@ -1339,7 +1339,7 @@ class DiscussionSearchAlertTest(UniqueCourseTest):
     def test_no_rewrite(self):
         self.setup_corrected_text(None)
         self.page.perform_search()
-        self.check_search_alert_messages(["no threads"])
+        self.check_search_alert_messages(["no posts"])
 
     @attr(shard=2)
     def test_rewrite_dismiss(self):
@@ -1361,7 +1361,7 @@ class DiscussionSearchAlertTest(UniqueCourseTest):
 
         self.setup_corrected_text(None)
         self.page.perform_search()
-        self.check_search_alert_messages(["no threads"])
+        self.check_search_alert_messages(["no posts"])
 
     @attr(shard=2)
     def test_rewrite_and_user(self):
@@ -1373,7 +1373,7 @@ class DiscussionSearchAlertTest(UniqueCourseTest):
     def test_user_only(self):
         self.setup_corrected_text(None)
         self.page.perform_search(self.SEARCHED_USERNAME)
-        self.check_search_alert_messages(["no threads", self.SEARCHED_USERNAME])
+        self.check_search_alert_messages(["no posts", self.SEARCHED_USERNAME])
         # make sure clicking the link leads to the user profile page
         UserProfileViewFixture([]).push()
         self.page.get_search_alert_links().first.click()
