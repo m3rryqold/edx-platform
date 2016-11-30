@@ -14,6 +14,41 @@ class DiscussionPageMixin(object):
     def is_ajax_finished(self):
         return self.browser.execute_script("return jQuery.active") == 0
 
+    @property
+    def new_post_button(self):
+        """
+        Returns the new post button if visible, else it returns None.
+        """
+        return next((button for button in self.q(css=".new-post-btn") if button.is_displayed()), None)
+
+    @property
+    def new_post_form(self):
+        """
+        Returns the new post form if visible, else it returns None.
+        """
+        return next((form for form in self.q(css=".forum-new-post-form") if form.is_displayed()), None)
+
+    def click_new_post_button(self):
+        """
+        Clicks the 'New Post' button.
+        """
+        self.wait_for(
+            lambda: self.new_post_button,
+            description="Waiting for new post button"
+        )
+        self.new_post_button.click()
+        self.wait_for(
+            lambda: self.new_post_form,
+            description="Waiting for new post form"
+        )
+
+    def click_cancel_new_post(self):
+        self.click_element(".cancel")
+        self.wait_for(
+            lambda: not self.new_post_form,
+            "Waiting for new post form to close"
+        )
+
 
 class DiscussionThreadPage(PageObject, DiscussionPageMixin):
     url = None
@@ -465,7 +500,7 @@ class DiscussionTabSingleThreadPage(CoursePage):
         return len(self.q(css=".forum-nav-thread").results) == thread_count
 
 
-class InlineDiscussionPage(PageObject):
+class InlineDiscussionPage(PageObject, DiscussionPageMixin):
     url = None
 
     def __init__(self, browser, discussion_id):
@@ -504,29 +539,12 @@ class InlineDiscussionPage(PageObject):
     def element_exists(self, selector):
         return self.q(css=self._discussion_selector + " " + selector).present
 
-    def is_new_post_opened(self):
-        return self._find_within(".new-post-article").visible
-
     def click_element(self, selector):
         self.wait_for_element_presence(
             "{discussion} {selector}".format(discussion=self._discussion_selector, selector=selector),
             "{selector} is visible".format(selector=selector)
         )
         self._find_within(selector).click()
-
-    def click_cancel_new_post(self):
-        self.click_element(".cancel")
-        EmptyPromise(
-            lambda: not self.is_new_post_opened(),
-            "New post closed"
-        ).fulfill()
-
-    def click_new_post_button(self):
-        self.click_element(".new-post-btn")
-        EmptyPromise(
-            self.is_new_post_opened,
-            "New post opened"
-        ).fulfill()
 
     @wait_for_js
     def _is_element_visible(self, selector):
@@ -704,33 +722,6 @@ class DiscussionTabHomePage(CoursePage, DiscussionPageMixin):
             lambda: _match_messages(text).results == [],
             "waiting for dismissed alerts to disappear"
         ).fulfill()
-
-    def click_new_post_button(self):
-        """
-        Clicks the 'New Post' button.
-        """
-        self.new_post_button.click()
-        EmptyPromise(
-            lambda: (
-                self.new_post_form
-            ),
-            "New post action succeeded"
-        ).fulfill()
-
-    @property
-    def new_post_button(self):
-        """
-        Returns the new post button.
-        """
-        return next(button for button in self.q(css=".new-post-btn") if button.is_displayed())
-
-    @property
-    def new_post_form(self):
-        """
-        Returns the new post form.
-        """
-        elements = self.q(css=".forum-new-post-form")
-        return elements[0] if elements.visible and len(elements) == 1 else None
 
     def set_new_post_editor_value(self, new_body):
         """
