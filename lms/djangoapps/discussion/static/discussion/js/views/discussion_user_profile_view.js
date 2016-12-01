@@ -1,3 +1,4 @@
+/* globals DiscussionThreadView */
 (function(define) {
     'use strict';
 
@@ -13,11 +14,10 @@
         'common/js/discussion/utils',
         'common/js/discussion/views/discussion_thread_profile_view',
         'text!discussion/templates/user-profile.underscore',
-        'text!common/templates/discussion/pagination.underscore',
-        'common/js/discussion/views/discussion_thread_list_view',
+        'common/js/discussion/views/discussion_thread_list_view'
     ],
         function(_, $, Backbone, gettext, URI, HtmlUtils, ViewUtils, Discussion, DiscussionUtil,
-                 DiscussionThreadProfileView, userProfileTemplate, paginationTemplate, DiscussionThreadListView) {
+                 DiscussionThreadProfileView, userProfileTemplate, DiscussionThreadListView) {
             var DiscussionUserProfileView = Backbone.View.extend({
                 events: {
                     'click .all-posts-btn': 'navigateToAllThreads'
@@ -28,6 +28,22 @@
                     this.discussion = options.discussion;
                     this.mode = 'all';
                     this.listenTo(this.model, 'change', this.render);
+                },
+
+                render: function() {
+                    HtmlUtils.setHtml(this.$el.find('.discussion-user-threads'),
+                        HtmlUtils.template(userProfileTemplate)({})
+                    );
+
+                    this.discussionThreadListView = new DiscussionThreadListView({
+                        collection: this.discussion,
+                        el: this.$('.inline-threads'),
+                        courseSettings: this.courseSettings
+                    }).render();
+
+                    this.discussionThreadListView.on('thread:selected', _.bind(this.navigateToThread, this));
+
+                    return this;
                 },
 
                 navigateToThread: function(threadId) {
@@ -57,18 +73,6 @@
 
                     // Set focus to thread list item that was saved as active
                     this.discussionThreadListView.$('.is-active').focus();
-                },
-
-                render: function() {
-                    this.discussionThreadListView = new DiscussionThreadListView({
-                        collection: this.discussion,
-                        el: this.$('.inline-threads'),
-                        courseSettings: this.courseSettings
-                    }).render();
-
-                    this.discussionThreadListView.on('thread:selected', _.bind(this.navigateToThread, this));
-
-                    return this;
                 }
             });
 

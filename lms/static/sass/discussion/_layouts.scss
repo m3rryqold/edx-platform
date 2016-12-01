@@ -1,4 +1,5 @@
 // Layouts for discussion pages
+@import '../course/base/extends';
 
 .discussion-user-profile-board {
 
@@ -13,7 +14,7 @@
 
     .discussion-profile-info  {
         @include border-right(1px solid $forum-color-border);
-        @include padding(0, $baseline, 0, $baseline);
+        padding: 0 $baseline;
         font-size: $forum-small-font-size;
     }
 
@@ -25,7 +26,7 @@
     .user-roles {
         padding: 0 $baseline / 4;
         position: relative;
-        top: -$baseline / 10;
+        top: -2px;
         background-color: $forum-color-background-label;
         color: $white;
         font-size: $forum-small-font-size;
@@ -40,8 +41,8 @@
     }
 
     .discussion-user-threads {
-      @include margin($baseline, auto, $baseline, auto);
-      width: 90%;
+      margin: $baseline auto;
+      width: 97%;
     }
 }
 

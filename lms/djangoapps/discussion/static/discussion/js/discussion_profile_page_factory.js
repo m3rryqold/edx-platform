@@ -10,7 +10,7 @@
             'common/js/discussion/utils',
             'common/js/discussion/models/discussion_user',
             'common/js/discussion/models/discussion_course_settings',
-            'discussion/js/views/discussion_user_profile_view',
+            'discussion/js/views/discussion_user_profile_view'
         ],
         function($, Backbone, Content, Discussion, DiscussionUtil, DiscussionUser, DiscussionCourseSettings,
             DiscussionUserProfileView) {
@@ -23,8 +23,6 @@
                     numPages = options.numPages,
                     sortPreference = options.sortPreference,
                     discussionUserProfileView,
-                    router,
-                    routerEvents,
                     discussion,
                     courseSettings;
 

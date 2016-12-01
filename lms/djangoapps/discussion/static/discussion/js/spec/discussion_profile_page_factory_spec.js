@@ -15,10 +15,12 @@ define(
                     DiscussionProfilePageFactory(_.extend(
                         {
                             courseId: testCourseId,
-                            $el: $('.discussion-user-threads'),
-                            user_info: DiscussionSpecHelper.getTestUserInfo(),
                             roles: DiscussionSpecHelper.getTestRoleInfo(),
-                            sort_preference: null,
+                            courseSettings: DiscussionSpecHelper.createTestCourseSettings().attributes,
+                            $el: $('.discussion-user-profile-board'),
+                            discussion: new Discussion(),
+                            userInfo: DiscussionSpecHelper.getTestUserInfo(),
+                            sortPreference: null,
                             threads: [],
                             page: 1,
                             numPages: 5
@@ -28,13 +30,13 @@ define(
                 };
 
             beforeEach(function() {
-                setFixtures('<div class="discussion-user-threads"></div>');
+                setFixtures('<div class="discussion-user-profile-board"></div>');
                 DiscussionSpecHelper.setUnderscoreFixtures();
             });
 
             it('can render itself', function() {
                 initializeDiscussionProfilePageFactory();
-                expect($('.discussion-user-threads').text()).toContain('Active Threads');
+                expect($('.discussion-user-profile-board').text()).toContain('Profile');
             });
         });
     }
