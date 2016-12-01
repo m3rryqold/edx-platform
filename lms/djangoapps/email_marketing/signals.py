@@ -152,11 +152,9 @@ def email_marketing_register_user(sender, user=None, profile=None,
     if user.is_anonymous():
         return
 
-    site_domain = _get_site_domain()
-
     # perform update asynchronously
     update_user.delay(
-        _create_sailthru_user_vars(user, user.profile), user.email, site_domain=site_domain, new_user=True
+        _create_sailthru_user_vars(user, user.profile), user.email, site=_get_current_site(), new_user=True
     )
 
 
@@ -194,12 +192,9 @@ def email_marketing_user_field_changed(sender, user=None, table=None, setting=No
         if not email_config.enabled:
             return
 
-        site_domain = _get_site_domain()
-
         # perform update asynchronously, flag if activation
-        update_user.delay(_create_sailthru_user_vars(user, user.profile), user.email, site_domain=site_domain,
-                          new_user=False,
-                          activation=(setting == 'is_active') and new_value is True)
+        update_user.delay(_create_sailthru_user_vars(user, user.profile), user.email, site=_get_current_site(),
+                          new_user=False, activation=(setting == 'is_active') and new_value is True)
 
     elif setting == 'email':
         # email update is special case
@@ -229,7 +224,7 @@ def _create_sailthru_user_vars(user, profile):
     return sailthru_vars
 
 
-def _get_site_domain():
+def _get_current_site():
     """
     Returns the site domain for request if any.
     """
@@ -237,5 +232,4 @@ def _get_site_domain():
     if not request:
         return
 
-    site_domain = request.site.domain
-    return site_domain
+    return request.site

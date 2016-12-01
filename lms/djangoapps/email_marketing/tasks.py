@@ -6,6 +6,7 @@ import time
 
 from celery import task
 from django.core.cache import cache
+from django.conf import settings
 
 from email_marketing.models import EmailMarketingConfiguration
 from student.models import EnrollStatusChange
@@ -18,7 +19,7 @@ log = logging.getLogger(__name__)
 
 # pylint: disable=not-callable
 @task(bind=True, default_retry_delay=3600, max_retries=24)
-def update_user(self, sailthru_vars, email, site_domain=None, new_user=False, activation=False):
+def update_user(self, sailthru_vars, email, site=None, new_user=False, activation=False):
     """
     Adds/updates Sailthru profile information for a user.
      Args:
@@ -38,7 +39,7 @@ def update_user(self, sailthru_vars, email, site_domain=None, new_user=False, ac
         sailthru_response = sailthru_client.api_post("user",
                                                      _create_sailthru_user_parm(sailthru_vars, sailthru_client,
                                                                                 email, new_user, email_config,
-                                                                                site_domain=site_domain))
+                                                                                site=site))
 
     except SailthruClientError as exc:
         log.error("Exception attempting to add/update user %s in Sailthru - %s", email, unicode(exc))
@@ -112,7 +113,7 @@ def update_user_email(self, new_email, old_email):
                              max_retries=email_config.sailthru_max_retries)
 
 
-def _create_sailthru_user_parm(sailthru_vars, sailthru_client, email, new_user, email_config, site_domain=None):
+def _create_sailthru_user_parm(sailthru_vars, sailthru_client, email, new_user, email_config, site=None):
     """
     Create sailthru user create/update parms
     """
@@ -121,7 +122,9 @@ def _create_sailthru_user_parm(sailthru_vars, sailthru_client, email, new_user, 
 
     # if new user add to list
     if new_user:
-        list_name = _get_or_create_user_lists(sailthru_client, site_domain)
+        list_name = _get_or_create_sailthru_list_for_site(
+            sailthru_client, email_config, site=site, default_list_name=email_config.sailthru_new_user_list
+        )
         sailthru_user['lists'] = {list_name: 1} if list_name else {email_config.sailthru_new_user_list: 1}
 
     return sailthru_user
@@ -296,39 +299,36 @@ def _get_course_content(course_url, sailthru_client, email_config):
     return response
 
 
-def _get_or_create_user_lists(sailthru_client, site_domain=None):
+def _get_or_create_sailthru_list_for_site(sailthru_client, email_config, site=None, default_list_name=None):
     """
-    Get the user list name from cache if exists else create one and return the name
+    Get the user list name from cache if exists else create one and return the name,
+    callers of this function should perform the enabled check of email config.
     :param sailthru_client:
-    :param user_lists:
+    :param email_config:
+    :param site:
+    :param default_list_name
     :return: list name if exists or created else return None
     """
-    email_config = EmailMarketingConfiguration.current()
-    if not email_config.enabled:
-        return
-
-    if site_domain and "edx.org" not in site_domain:
-        list_name = site_domain.replace(".", "_") + "_user_list"
+    if site and site.id != settings.SITE_ID:
+        list_name = site.domain.replace(".", "_") + "_user_list"
     else:
-        list_name = "All edX Users"
+        list_name = default_list_name
 
-    cached = cache.get(email_config.CACHE_KEY)
-    if cached:
-        for user_list in cached['lists']:
-            if user_list.get('name') == list_name:
-                return list_name
-
-    sailthru_response = _get_or_create_list(sailthru_client, list_name)
-    if sailthru_response:
-        cache.set(email_config.CACHE_KEY, sailthru_response)
-        return list_name
+    _get_or_create_sailthru_list(sailthru_client, email_config, list_name)
+    return list_name
 
 
-def _get_or_create_list(sailthru_client, list_name):
+def _get_or_create_sailthru_list(sailthru_client, email_config, list_name):
     """
     Get list from sailthru and return if list_name exists else create a new one
     and return list data for all lists.
     """
+    cached = cache.get(email_config.CACHE_KEY)
+    if cached:
+        for user_list in cached['lists']:
+            if user_list.get('name') == list_name:
+                return cached
+
     sailthru_get_response = sailthru_client.api_get("list", {})
     if not sailthru_get_response.is_ok():
         error = sailthru_get_response.get_error()
@@ -337,6 +337,7 @@ def _get_or_create_list(sailthru_client, list_name):
 
     for user_list in sailthru_get_response.json['lists']:
         if user_list.get('name') == list_name:
+            cache.set(email_config.CACHE_KEY, sailthru_get_response.json)
             return sailthru_get_response.json
 
     # create a list in sailthru
@@ -359,6 +360,7 @@ def _get_or_create_list(sailthru_client, list_name):
         log.info("Error attempting to read list record from Sailthru: %s", error.get_message())
         return
 
+    cache.set(email_config.CACHE_KEY, sailthru_get_response.json)
     return sailthru_get_response.json
 
 
