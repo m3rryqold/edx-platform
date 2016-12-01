@@ -1,6 +1,5 @@
 """Tests of email marketing signal handlers."""
 import ddt
-import json
 import logging
 
 from django.test import TestCase
@@ -14,7 +13,7 @@ from email_marketing.signals import handle_enroll_status_change, \
     email_marketing_user_field_changed, \
     add_email_marketing_cookies
 from email_marketing.tasks import update_user, update_user_email, update_course_enrollment, \
-    _get_course_content, _update_unenrolled_list, _get_or_create_list
+    _get_course_content, _update_unenrolled_list, _get_or_create_sailthru_list
 from email_marketing.models import EmailMarketingConfiguration
 from django.test.client import RequestFactory
 from student.tests.factories import UserFactory, UserProfileFactory
@@ -34,7 +33,7 @@ def update_email_marketing_config(enabled=True, key='badkey', secret='badsecret'
     """
     Enable / Disable Sailthru integration
     """
-    EmailMarketingConfiguration.objects.create(
+    return EmailMarketingConfiguration.objects.create(
         enabled=enabled,
         sailthru_key=key,
         sailthru_secret=secret,
@@ -126,7 +125,7 @@ class EmailMarketingTests(TestCase):
         """
         mock_sailthru.return_value = SailthruResponse(JsonResponse({'ok': True}))
         update_user.delay(
-            {'gender': 'm', 'username': 'test', 'activated': 1}, TEST_EMAIL, self.site_domain, new_user=True
+            {'gender': 'm', 'username': 'test', 'activated': 1}, TEST_EMAIL, self.site, new_user=True
         )
         self.assertFalse(mock_log_error.called)
         self.assertEquals(mock_sailthru.call_args[0][0], "user")
@@ -143,9 +142,8 @@ class EmailMarketingTests(TestCase):
         """
         test non existing domain name updates Sailthru user lists with default list
         """
-        mock_sailthru.return_value = SailthruResponse(JsonResponse({'ok': True}))
         update_user.delay(
-            {'gender': 'm', 'username': 'test', 'activated': 1}, TEST_EMAIL, 'non-existing.example.com', new_user=True
+            {'gender': 'm', 'username': 'test', 'activated': 1}, TEST_EMAIL, site=None, new_user=True
         )
         self.assertEquals(mock_sailthru.call_args[0][0], "user")
         userparms = mock_sailthru.call_args[0][1]
@@ -485,8 +483,9 @@ class EmailMarketingTests(TestCase):
         """
         Test the task the create sailthru lists.
         """
+        email_marketing_config = update_email_marketing_config(enabled=True)
         mock_sailthru_client.api_get.return_value = SailthruResponse(JsonResponse({'lists': []}))
-        _get_or_create_list(mock_sailthru_client, 'test1_user_list')
+        _get_or_create_sailthru_list(mock_sailthru_client, email_marketing_config, 'test1_user_list')
         mock_sailthru_client.api_get.assert_called_with("list", {})
         mock_sailthru_client.api_post.assert_called_with(
             "list", {'list': 'test1_user_list', 'primary': 0, 'public_name': 'test1_user_list'}
@@ -495,7 +494,7 @@ class EmailMarketingTests(TestCase):
         # test existing user list
         mock_sailthru_client.api_get.return_value = \
             SailthruResponse(JsonResponse({'lists': [{'name': 'test1_user_list'}]}))
-        _get_or_create_list(mock_sailthru_client, 'test2_user_list')
+        _get_or_create_sailthru_list(mock_sailthru_client, email_marketing_config, 'test2_user_list')
         mock_sailthru_client.api_get.assert_called_with("list", {})
         mock_sailthru_client.api_post.assert_called_with(
             "list", {'list': 'test2_user_list', 'primary': 0, 'public_name': 'test2_user_list'}
@@ -504,13 +503,15 @@ class EmailMarketingTests(TestCase):
         # test get error from Sailthru
         mock_sailthru_client.api_get.return_value = \
             SailthruResponse(JsonResponse({'error': 43, 'errormsg': 'Got an error'}))
-        self.assertEqual(_get_or_create_list(mock_sailthru_client, 'test1_user_list'), None)
+        self.assertEqual(_get_or_create_sailthru_list(
+            mock_sailthru_client, email_marketing_config, 'test1_user_list'), None
+        )
 
         # test post error from Sailthru
         mock_sailthru_client.api_post.return_value = \
             SailthruResponse(JsonResponse({'error': 43, 'errormsg': 'Got an error'}))
         mock_sailthru_client.api_get.return_value = SailthruResponse(JsonResponse({'lists': []}))
-        self.assertEqual(_get_or_create_list(mock_sailthru_client, 'test2_user_list'), None)
+        self.assertEqual(_get_or_create_sailthru_list(mock_sailthru_client, email_marketing_config, 'test2_user_list'), None)
 
     @patch('email_marketing.tasks.log.error')
     @patch('email_marketing.tasks.SailthruClient.api_post')
