@@ -1,3 +1,5 @@
+/*globals Discussion */
+
 define(
     [
         'underscore',

@@ -1181,14 +1181,8 @@ class UserProfileTestCase(ForumsEnableMixin, UrlResetMixin, ModuleStoreTestCase)
     def test_html(self, mock_request):
         self.check_html(mock_request)
 
-    def test_html_p2(self, mock_request):
-        self.check_html(mock_request, page="2")
-
     def test_ajax(self, mock_request):
         self.check_ajax(mock_request)
-
-    def test_ajax_p2(self, mock_request):
-        self.check_ajax(mock_request, page="2")
 
     def test_404_non_enrolled_user(self, __):
         """
